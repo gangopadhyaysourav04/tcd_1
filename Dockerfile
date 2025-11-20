@@ -10,8 +10,14 @@ libatlas-base-dev
 && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 
 --index-url https://download.pytorch.org/whl/cu118
-RUN pip install --no-cache-dir torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1
---index-url https://download.pytorch.org/whl/cu118
+RUN pip install --no-cache-dir 
+streamlit==1.38.0 
+pandas==2.2.3 
+numpy==2.1.3 
+matplotlib==3.9.2 
+seaborn==0.13.2 
+
+scikit-learn==1.5.1
 COPY . .
 EXPOSE 8501
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
