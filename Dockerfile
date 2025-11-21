@@ -1,21 +1,18 @@
-FROM python:3.11-slim
+FROM python:3.11
 
 WORKDIR /app
 
-# The backslashes (\) are necessary to treat multiple lines as a single continuous command.
-# This creates a more efficient Docker layer.
+# RESOLUTION: Switched from 'python:3.11-slim' to 'python:3.11' to force a stable Python 
+# environment (avoiding the Python 3.13 conflicts) and ensure necessary build 
+# tools for scientific libraries are present.
+
+# Update and install minimal required system libs (only need gfortran for scipy/numpy)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential \
-        libblas3 \
-        liblapack3 \
-        libgfortran5 \
-        libatlas-base-dev \
-        libopenblas-dev && \
+        libgfortran5 && \
     rm -rf /var/lib/apt/lists/*
 
-# RESOLUTION: Further adjusted scikit-learn version (to 1.2.2) and added libopenblas-dev 
-# to improve stability of scientific package compilation/linking in the slim environment.
+# Using stable versions known to work together for Python 3.11
 RUN pip install --no-cache-dir \
     streamlit==1.38.0 \
     pandas==2.2.3 \
