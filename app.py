@@ -1,8 +1,3 @@
-# =============================
-# Toxic Comment Detection - Hinglish + English (Enhanced v3)
-# =============================
-
-# --- Libraries ---
 import pandas as pd
 import numpy as np
 import re
@@ -16,18 +11,13 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.utils import resample
 
-# =============================
-# ✅ Streamlit Config
-# =============================
-st.set_page_config(page_title="🛡️ Toxic Comment Detection", page_icon="🧠")
 
-# =============================
-# 1️⃣ Text Cleaning + Normalization
-# =============================
+st.set_page_config(page_title="Toxic Comment Detection", page_icon=" ")
+
+
 def clean_text(text):
     text = str(text).lower()
 
-    # ✅ Normalize abusive variants
     mappings = {
         "g@ndu": "gandu", "g@ndoo": "gandu", "g4ndu": "gandu",
         "chutiyaa": "chutiya", "chut!ya": "chutiya", "chutiy@": "chutiya",
@@ -49,18 +39,12 @@ def clean_text(text):
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-# =============================
-# 2️⃣ Load + Inject Neutral Data (Expanded Hinglish Greetings)
-# =============================
 @st.cache_data
 def load_data():
     df = pd.read_csv("labeled_data_with_more_hinglish_final_v2_cleaned.csv")
     df = df[["class", "tweet"]].dropna()
     df["clean_tweet"] = df["tweet"].apply(clean_text)
-
-    # ✅ Expanded Neutral / Greeting / Hinglish Polite Examples
     neutral_comments = [
-        # English
         "good morning", "good night", "have a nice day", "thank you", "thanks bro", "thanks bhai",
         "love you bro", "hope you are fine", "how are you", "take care", "good evening",
         "you are amazing", "nice work", "great job", "congratulations", "happy birthday",
@@ -69,7 +53,6 @@ def load_data():
         "shukriya", "dhanyawaad", "jai shree ram", "hello bhai", "good vibes only","how are you",
         "allah hu akbar", "salaam alaikum", "ram ram", "om shanti", "sat sri akaal","how are you ?"
         "namaskar", "jai mata di", "jai bajrangbali", "hare krishna",
-        # Hinglish greetings
         "kaise ho", "kya haal hai", "sab badiya", "theek ho na", "sab theek hai","asha karta hoon ki aapka din khushalpurwak beetein"
         "namaste bhai", "radhe radhe bhai", "ram ram bhai", "jai shree ram bhai",
         "kaise ho bhai", "badiya ho", "mast ho", "all good bro", "kya scene hai",
@@ -82,10 +65,8 @@ def load_data():
     })
     df_neutral["clean_tweet"] = df_neutral["tweet"].apply(clean_text)
 
-    # ✅ Merge with original
     df = pd.concat([df, df_neutral], ignore_index=True)
 
-    # ✅ Reinforcement Abusive Examples
     reinforcement = [
         "madarchod hai tu", "lawde ke bacche", "bhenchod sala", "gandu aadmi",
         "chutiya insaan", "bc mc", "madarchod lawda", "teri maa ka bhosda",
@@ -99,7 +80,6 @@ def load_data():
 
     df = pd.concat([df, df_reinforce], ignore_index=True)
 
-    # ✅ Balance classes
     class_counts = df["class"].value_counts()
     max_count = class_counts.max()
     balanced_df = pd.concat([
@@ -114,9 +94,6 @@ def load_data():
 
 data = load_data()
 
-# =============================
-# 3️⃣ TF-IDF Feature Engineering
-# =============================
 def feature_engineering(data):
     vectorizer = TfidfVectorizer(
         max_features=15000,
@@ -129,9 +106,6 @@ def feature_engineering(data):
 
 X, y, tfidf_vectorizer = feature_engineering(data)
 
-# =============================
-# 4️⃣ Model Training
-# =============================
 @st.cache_resource
 def train_model(_X, y):
     X_train, X_test, y_train, y_test = train_test_split(
@@ -140,7 +114,7 @@ def train_model(_X, y):
 
     model = LogisticRegression(
         max_iter=400,
-        C=1.0,  # 🔧 regularization
+        C=1.0,
         class_weight="balanced",
         solver="liblinear"
     )
@@ -159,13 +133,11 @@ def train_model(_X, y):
 
 model, acc, report, cm = train_model(X, y)
 
-# =============================
-# 5️⃣ Streamlit Dashboard
-# =============================
-st.title("🛡️ Toxic Comment Detection (Hinglish + English)")
+
+st.title("Toxic Comment Detection (Hinglish + English)")
 st.markdown("Enhanced version with abusive reinforcement + Hinglish neutral greetings")
 
-st.sidebar.header("📊 Model Performance")
+st.sidebar.header("Model Performance")
 st.sidebar.write(f"**Accuracy:** {acc:.2f}")
 
 st.sidebar.subheader("F1 Scores")
@@ -186,12 +158,9 @@ sns.countplot(x="class_name", data=data, palette="Set2", ax=ax2)
 ax2.set_title("Balanced Class Counts After Injection")
 st.pyplot(fig2)
 
-# =============================
-# 6️⃣ Prediction Section
-# =============================
-st.header("🔍 Try a Custom Comment")
+st.header("Try a Custom Comment")
 
-user_text = st.text_area("✍️ Enter a comment (Hinglish + English):")
+user_text = st.text_area("Enter a comment (Hinglish + English):")
 
 if st.button("Analyze"):
     if user_text.strip():
@@ -205,11 +174,11 @@ if st.button("Analyze"):
         conf = prob[pred]
 
         if pred == 0:
-            st.error(f"🚨 Prediction: {label} (Confidence: {conf:.2f})")
+            st.error(f"Prediction: {label} (Confidence: {conf:.2f})")
         elif pred == 1:
-            st.warning(f"⚠️ Prediction: {label} (Confidence: {conf:.2f})")
+            st.warning(f"Prediction: {label} (Confidence: {conf:.2f})")
         else:
-            st.success(f"✅ Prediction: {label} (Confidence: {conf:.2f})")
+            st.success(f"Prediction: {label} (Confidence: {conf:.2f})")
 
         st.subheader("Confidence Breakdown")
         probs_df = pd.DataFrame({
