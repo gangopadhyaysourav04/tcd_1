@@ -14,10 +14,11 @@ RUN apt-get update && \
 RUN pip install --no-cache-dir \
     streamlit==1.38.0 \
     pandas==2.2.3 \
-    numpy==2.1.3 \
+    numpy==1.26.4 \
+    scipy==1.11.4 \
     matplotlib==3.9.2 \
     seaborn==0.13.2 \
-    scikit-learn==1.4.2
+    scikit-learn==1.3.0
 
 COPY . .
 
