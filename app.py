@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
 import re
+import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
-import streamlit as st
 
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -12,17 +12,17 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.utils import resample
 
 
-st.set_page_config(page_title="Toxic Comment Detection", page_icon="⚠️")
+st.set_page_config(page_title="Toxic Comment Detection", layout="wide")
 
 
+# ---------------- CLEAN TEXT ----------------
 def clean_text(text):
     text = str(text).lower()
 
     mappings = {
         "g@ndu": "gandu", "g@ndoo": "gandu", "g4ndu": "gandu",
-        "chutiyaa": "chutiya", "chut!ya": "chutiya", "chutiy@": "chutiya",
+        "chutiyaa": "chutiya", "chut!ya": "chutiya",
         "madarch0d": "madarchod", "bhench0d": "bhenchod",
-        "fck": "fuck", "fucc": "fuck",
         "lawde": "lauda", "lodu": "lauda",
         "kutter ka baccha": "kutta",
         "bhen ke lode": "bhenchod",
@@ -38,55 +38,66 @@ def clean_text(text):
     return text
 
 
+# ---------------- LOAD + FIX DATA ----------------
 def load_data():
     df = pd.read_csv("labeled_data_with_more_hinglish_final_v2_cleaned.csv")
-    df = df[["class", "tweet"]].dropna()
+
+    # hard sanitize labels
+    df["class"] = pd.to_numeric(df["class"], errors="coerce")
+    df = df.dropna(subset=["class", "tweet"])
+    df["class"] = df["class"].astype(int)
+    df = df[df["class"].isin([0, 1, 2])]
+
     df["clean_tweet"] = df["tweet"].apply(clean_text)
 
-    neutral_comments = [
-        "good morning", "good night", "thank you", "thanks bhai",
-        "how are you", "take care", "nice work", "great job",
-        "jai hind", "namaste", "radhe radhe", "shukriya",
-        "salaam alaikum", "ram ram", "sat sri akaal",
-        "namaskar", "kaise ho", "kya haal hai",
-        "sab theek hai", "all good bro"
+    # inject neutral
+    neutral = [
+        "good morning", "thank you", "how are you", "nice work",
+        "great job", "namaste", "jai hind", "take care",
+        "all good bro", "sab theek hai"
     ]
 
     df_neutral = pd.DataFrame({
-        "class": [2] * len(neutral_comments),
-        "tweet": neutral_comments
+        "class": 2,
+        "tweet": neutral
     })
     df_neutral["clean_tweet"] = df_neutral["tweet"].apply(clean_text)
 
-    reinforcement = [
-        "madarchod hai tu", "lawde ke bacche",
-        "bhenchod sala", "chutiya insaan",
-        "teri maa ka bhosda", "gandu aadmi"
+    # inject offensive reinforcement
+    reinforce = [
+        "madarchod hai tu", "bhenchod sala",
+        "lawde ke bacche", "chutiya insaan",
+        "teri maa ka bhosda"
     ]
 
     df_reinforce = pd.DataFrame({
-        "class": [1] * len(reinforcement),
-        "tweet": reinforcement
+        "class": 1,
+        "tweet": reinforce
     })
     df_reinforce["clean_tweet"] = df_reinforce["tweet"].apply(clean_text)
 
     df = pd.concat([df, df_neutral, df_reinforce], ignore_index=True)
 
-    # Force all classes to exist
-    assert set(df["class"]) == {0, 1, 2}, "Missing class detected"
+    # enforce minimum samples per class
+    counts = df["class"].value_counts()
+    for c in [0, 1, 2]:
+        if c not in counts or counts[c] < 5:
+            raise ValueError(f"Class {c} has insufficient samples: {counts.to_dict()}")
 
-    # Balance
-    max_count = df["class"].value_counts().max()
-    df = pd.concat([
-        resample(df[df["class"] == c], replace=True, n_samples=max_count, random_state=42)
+    # balance
+    max_n = counts.max()
+    df_balanced = pd.concat([
+        resample(df[df["class"] == c], replace=True, n_samples=max_n, random_state=42)
         for c in [0, 1, 2]
     ])
 
-    return df
+    return df_balanced.reset_index(drop=True)
 
 
 data = load_data()
 
+
+# ---------------- FEATURES ----------------
 vectorizer = TfidfVectorizer(
     max_features=12000,
     ngram_range=(1, 2),
@@ -97,16 +108,29 @@ X = vectorizer.fit_transform(data["clean_tweet"])
 y = data["class"].values
 
 
+# final sanity check (this is non-negotiable)
+unique, counts = np.unique(y, return_counts=True)
+if len(unique) != 3:
+    raise ValueError(f"Training labels invalid: {dict(zip(unique, counts))}")
+
+
+# ---------------- TRAIN MODEL ----------------
 def train_model(X, y):
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X, y,
+        test_size=0.2,
+        stratify=y,
+        random_state=42
     )
 
+    if len(np.unique(y_train)) < 2:
+        raise ValueError("y_train collapsed to single class")
+
     model = LogisticRegression(
-        max_iter=500,
         solver="lbfgs",
         multi_class="multinomial",
-        class_weight="balanced"
+        class_weight="balanced",
+        max_iter=600
     )
 
     model.fit(X_train, y_train)
@@ -128,21 +152,29 @@ def train_model(X, y):
 model, acc, report, cm = train_model(X, y)
 
 
+# ---------------- UI ----------------
 st.title("Toxic Comment Detection")
-st.sidebar.write(f"Accuracy: {acc:.2f}")
+
+st.sidebar.metric("Accuracy", f"{acc:.2f}")
 
 fig, ax = plt.subplots()
-sns.heatmap(cm, annot=True, fmt="d", ax=ax)
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    xticklabels=["Hate", "Offensive", "Non-toxic"],
+    yticklabels=["Hate", "Offensive", "Non-toxic"],
+    ax=ax
+)
 st.pyplot(fig)
 
+text = st.text_area("Enter text")
 
-user_text = st.text_area("Enter text")
-
-if st.button("Analyze") and user_text.strip():
-    cleaned = clean_text(user_text)
-    X_input = vectorizer.transform([cleaned])
-    pred = model.predict(X_input)[0]
-    prob = model.predict_proba(X_input)[0]
+if st.button("Analyze") and text.strip():
+    cleaned = clean_text(text)
+    X_in = vectorizer.transform([cleaned])
+    pred = model.predict(X_in)[0]
+    prob = model.predict_proba(X_in)[0][pred]
 
     labels = {0: "Hate Speech", 1: "Offensive", 2: "Non-toxic"}
-    st.write(f"Prediction: **{labels[pred]}** ({prob[pred]:.2f})")
+    st.success(f"Prediction: {labels[pred]}  |  Confidence: {prob:.2f}")
