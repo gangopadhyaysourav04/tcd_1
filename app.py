@@ -11,15 +11,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.utils import resample
 
-# --------------------------------------------------
-# Streamlit config
-# --------------------------------------------------
-st.set_page_config(page_title="Toxic Comment Detection", page_icon="☣️")
+
+st.set_page_config(page_title="Toxic Comment Detection", page_icon="⚠️")
 
 
-# --------------------------------------------------
-# Text cleaning
-# --------------------------------------------------
 def clean_text(text):
     text = str(text).lower()
 
@@ -27,53 +22,34 @@ def clean_text(text):
         "g@ndu": "gandu", "g@ndoo": "gandu", "g4ndu": "gandu",
         "chutiyaa": "chutiya", "chut!ya": "chutiya", "chutiy@": "chutiya",
         "madarch0d": "madarchod", "bhench0d": "bhenchod",
-        "maderchod": "madarchod",
-        "fck": "fuck", "fucc": "fuck", "fak": "fuck",
-        "laude": "lauda", "lawde": "lauda", "lodu": "lauda",
-        "lund": "lauda", "chut": "chut", "chutmarike": "chutmarike",
-        "kutter ka baccha": "kutta", "kutte ka baccha": "kutta",
-        "bhen ke lode": "bhenchod", "bkl": "bewakoof"
+        "fck": "fuck", "fucc": "fuck",
+        "lawde": "lauda", "lodu": "lauda",
+        "kutter ka baccha": "kutta",
+        "bhen ke lode": "bhenchod",
     }
 
     for k, v in mappings.items():
         text = text.replace(k, v)
 
     text = re.sub(r"http\S+|www\S+", "", text)
-    text = re.sub(r"@\w+", "", text)
-    text = re.sub(r"#\w+", "", text)
+    text = re.sub(r"@\w+|#\w+", "", text)
     text = re.sub(r"[^a-zA-Z\u0900-\u097F\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-
     return text
 
 
-# --------------------------------------------------
-# Load + build dataset
-# --------------------------------------------------
-@st.cache_data
 def load_data():
     df = pd.read_csv("labeled_data_with_more_hinglish_final_v2_cleaned.csv")
     df = df[["class", "tweet"]].dropna()
     df["clean_tweet"] = df["tweet"].apply(clean_text)
 
     neutral_comments = [
-        "good morning", "good night", "have a nice day", "thank you",
-        "thanks bro", "thanks bhai", "love you bro", "hope you are fine",
-        "how are you", "take care", "good evening",
-        "you are amazing", "nice work", "great job", "congratulations",
-        "happy birthday", "best wishes", "keep going", "awesome",
-        "fantastic", "you are welcome", "good luck", "stay safe",
-        "peace", "jai hind", "namaste", "radhe radhe", "shukriya",
-        "dhanyawaad", "jai shree ram", "hello bhai", "good vibes only",
-        "allah hu akbar", "salaam alaikum", "ram ram", "om shanti",
-        "sat sri akaal", "namaskar", "jai mata di", "jai bajrangbali",
-        "hare krishna", "kaise ho", "kya haal hai", "sab badiya",
-        "theek ho na", "sab theek hai",
-        "asha karta hoon ki aapka din khushalpurwak beetein",
-        "namaste bhai", "radhe radhe bhai", "ram ram bhai",
-        "jai shree ram bhai", "kaise ho bhai", "badiya ho", "mast ho",
-        "all good bro", "kya scene hai", "milte hai jaldi",
-        "chalo milte hai", "kya haal chaal", "sabka bhala ho"
+        "good morning", "good night", "thank you", "thanks bhai",
+        "how are you", "take care", "nice work", "great job",
+        "jai hind", "namaste", "radhe radhe", "shukriya",
+        "salaam alaikum", "ram ram", "sat sri akaal",
+        "namaskar", "kaise ho", "kya haal hai",
+        "sab theek hai", "all good bro"
     ]
 
     df_neutral = pd.DataFrame({
@@ -83,11 +59,9 @@ def load_data():
     df_neutral["clean_tweet"] = df_neutral["tweet"].apply(clean_text)
 
     reinforcement = [
-        "madarchod hai tu", "lawde ke bacche", "bhenchod sala",
-        "gandu aadmi", "chutiya insaan", "bc mc",
-        "madarchod lawda", "teri maa ka bhosda",
-        "laude", "maderchod", "kutter ka baccha",
-        "lund", "chut", "chutmarike"
+        "madarchod hai tu", "lawde ke bacche",
+        "bhenchod sala", "chutiya insaan",
+        "teri maa ka bhosda", "gandu aadmi"
     ]
 
     df_reinforce = pd.DataFrame({
@@ -98,139 +72,77 @@ def load_data():
 
     df = pd.concat([df, df_neutral, df_reinforce], ignore_index=True)
 
-    classes, counts = np.unique(df["class"], return_counts=True)
-    if len(classes) < 3:
-        raise ValueError(f"Dataset corrupted. Classes found: {classes}")
+    # Force all classes to exist
+    assert set(df["class"]) == {0, 1, 2}, "Missing class detected"
 
-    max_count = counts.max()
-    balanced_df = pd.concat([
-        resample(
-            df[df["class"] == c],
-            replace=True,
-            n_samples=max_count,
-            random_state=42
-        )
-        for c in classes
+    # Balance
+    max_count = df["class"].value_counts().max()
+    df = pd.concat([
+        resample(df[df["class"] == c], replace=True, n_samples=max_count, random_state=42)
+        for c in [0, 1, 2]
     ])
 
-    balanced_df["class_name"] = balanced_df["class"].map({
-        0: "Hate Speech",
-        1: "Offensive Language",
-        2: "Non-toxic"
-    })
-
-    return balanced_df
+    return df
 
 
-# --------------------------------------------------
-# Feature engineering
-# --------------------------------------------------
-def feature_engineering(data):
-    vectorizer = TfidfVectorizer(
-        max_features=15000,
-        stop_words="english",
-        ngram_range=(1, 3)
-    )
+data = load_data()
 
-    X = vectorizer.fit_transform(data["clean_tweet"])
-    y = data["class"].to_numpy()
+vectorizer = TfidfVectorizer(
+    max_features=12000,
+    ngram_range=(1, 2),
+    stop_words="english"
+)
 
-    if len(np.unique(y)) < 2:
-        raise ValueError("Target has only one class")
-
-    return X, y, vectorizer
+X = vectorizer.fit_transform(data["clean_tweet"])
+y = data["class"].values
 
 
-# --------------------------------------------------
-# Model training (MULTICLASS SAFE)
-# --------------------------------------------------
 def train_model(X, y):
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=0.2,
-        stratify=y,
-        random_state=42
+        X, y, test_size=0.2, random_state=42, stratify=y
     )
 
     model = LogisticRegression(
         max_iter=500,
-        class_weight="balanced",
         solver="lbfgs",
-        multi_class="multinomial"
+        multi_class="multinomial",
+        class_weight="balanced"
     )
 
     model.fit(X_train, y_train)
+
     preds = model.predict(X_test)
 
-    return (
-        model,
-        accuracy_score(y_test, preds),
-        classification_report(
-            y_test, preds,
-            target_names=["Hate Speech", "Offensive", "Non-toxic"],
-            output_dict=True
-        ),
-        confusion_matrix(y_test, preds)
+    acc = accuracy_score(y_test, preds)
+    report = classification_report(
+        y_test, preds,
+        labels=[0, 1, 2],
+        target_names=["Hate Speech", "Offensive", "Non-toxic"],
+        output_dict=True
     )
+    cm = confusion_matrix(y_test, preds)
+
+    return model, acc, report, cm
 
 
-# --------------------------------------------------
-# Run pipeline
-# --------------------------------------------------
-data = load_data()
-X, y, tfidf_vectorizer = feature_engineering(data)
 model, acc, report, cm = train_model(X, y)
 
 
-# --------------------------------------------------
-# UI
-# --------------------------------------------------
-st.title("Toxic Comment Detection (Hinglish + English)")
+st.title("Toxic Comment Detection")
+st.sidebar.write(f"Accuracy: {acc:.2f}")
 
-st.sidebar.header("Model Performance")
-st.sidebar.write(f"Accuracy: **{acc:.2f}**")
-
-st.sidebar.subheader("F1 Scores")
-st.sidebar.write(f"Hate Speech: {report['Hate Speech']['f1-score']:.2f}")
-st.sidebar.write(f"Offensive: {report['Offensive']['f1-score']:.2f}")
-st.sidebar.write(f"Non-toxic: {report['Non-toxic']['f1-score']:.2f}")
-
-st.subheader("Confusion Matrix")
 fig, ax = plt.subplots()
-sns.heatmap(
-    cm, annot=True, fmt="d", cmap="Blues",
-    xticklabels=["Hate", "Offensive", "Non-toxic"],
-    yticklabels=["Hate", "Offensive", "Non-toxic"],
-    ax=ax
-)
+sns.heatmap(cm, annot=True, fmt="d", ax=ax)
 st.pyplot(fig)
 
-st.header("Try a Custom Comment")
 
-user_text = st.text_area("Enter a comment:")
+user_text = st.text_area("Enter text")
 
-if st.button("Analyze"):
-    if user_text.strip():
-        cleaned = clean_text(user_text)
-        X_input = tfidf_vectorizer.transform([cleaned])
+if st.button("Analyze") and user_text.strip():
+    cleaned = clean_text(user_text)
+    X_input = vectorizer.transform([cleaned])
+    pred = model.predict(X_input)[0]
+    prob = model.predict_proba(X_input)[0]
 
-        pred = model.predict(X_input)[0]
-        prob = model.predict_proba(X_input)[0]
-
-        class_map = {
-            0: "Hate Speech",
-            1: "Offensive Language",
-            2: "Non-toxic"
-        }
-
-        label = class_map[pred]
-        conf = prob[pred]
-
-        if pred == 0:
-            st.error(f"{label} ({conf:.2f})")
-        elif pred == 1:
-            st.warning(f"{label} ({conf:.2f})")
-        else:
-            st.success(f"{label} ({conf:.2f})")
-    else:
-        st.info("Please enter some text.")
+    labels = {0: "Hate Speech", 1: "Offensive", 2: "Non-toxic"}
+    st.write(f"Prediction: **{labels[pred]}** ({prob[pred]:.2f})")
