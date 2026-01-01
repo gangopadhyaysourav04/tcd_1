@@ -48,7 +48,7 @@ def clean_text(text):
 
 
 # --------------------------------------------------
-# Load + build dataset (cached)
+# Load + build dataset
 # --------------------------------------------------
 @st.cache_data
 def load_data():
@@ -142,7 +142,7 @@ def feature_engineering(data):
 
 
 # --------------------------------------------------
-# Model training (no cache)
+# Model training (MULTICLASS SAFE)
 # --------------------------------------------------
 def train_model(X, y):
     X_train, X_test, y_train, y_test = train_test_split(
@@ -152,13 +152,11 @@ def train_model(X, y):
         random_state=42
     )
 
-    if len(np.unique(y_train)) < 2:
-        raise ValueError("y_train has only one class")
-
     model = LogisticRegression(
         max_iter=500,
         class_weight="balanced",
-        solver="liblinear"
+        solver="lbfgs",
+        multi_class="multinomial"
     )
 
     model.fit(X_train, y_train)
@@ -207,11 +205,6 @@ sns.heatmap(
 )
 st.pyplot(fig)
 
-st.subheader("Class Distribution")
-fig2, ax2 = plt.subplots()
-sns.countplot(x="class_name", data=data, ax=ax2)
-st.pyplot(fig2)
-
 st.header("Try a Custom Comment")
 
 user_text = st.text_area("Enter a comment:")
@@ -240,4 +233,4 @@ if st.button("Analyze"):
         else:
             st.success(f"{label} ({conf:.2f})")
     else:
-        st.info("Please enter some text to analyze.")
+        st.info("Please enter some text.")
