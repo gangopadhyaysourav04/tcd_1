@@ -48,7 +48,7 @@ def clean_text(text):
 
 
 # --------------------------------------------------
-# Load + build dataset (CACHED)
+# Load + build dataset (cached)
 # --------------------------------------------------
 @st.cache_data
 def load_data():
@@ -56,7 +56,6 @@ def load_data():
     df = df[["class", "tweet"]].dropna()
     df["clean_tweet"] = df["tweet"].apply(clean_text)
 
-    # Neutral injections (FIXED commas)
     neutral_comments = [
         "good morning", "good night", "have a nice day", "thank you",
         "thanks bro", "thanks bhai", "love you bro", "hope you are fine",
@@ -83,7 +82,6 @@ def load_data():
     })
     df_neutral["clean_tweet"] = df_neutral["tweet"].apply(clean_text)
 
-    # Reinforcement abuse
     reinforcement = [
         "madarchod hai tu", "lawde ke bacche", "bhenchod sala",
         "gandu aadmi", "chutiya insaan", "bc mc",
@@ -100,12 +98,10 @@ def load_data():
 
     df = pd.concat([df, df_neutral, df_reinforce], ignore_index=True)
 
-    # HARD validation
     classes, counts = np.unique(df["class"], return_counts=True)
     if len(classes) < 3:
         raise ValueError(f"Dataset corrupted. Classes found: {classes}")
 
-    # Balance classes
     max_count = counts.max()
     balanced_df = pd.concat([
         resample(
@@ -146,7 +142,7 @@ def feature_engineering(data):
 
 
 # --------------------------------------------------
-# Model training (NO CACHE – deliberate)
+# Model training (no cache)
 # --------------------------------------------------
 def train_model(X, y):
     X_train, X_test, y_train, y_test = train_test_split(
@@ -157,7 +153,7 @@ def train_model(X, y):
     )
 
     if len(np.unique(y_train)) < 2:
-        raise ValueError("y_train has only one class – cannot train")
+        raise ValueError("y_train has only one class")
 
     model = LogisticRegression(
         max_iter=500,
@@ -181,7 +177,7 @@ def train_model(X, y):
 
 
 # --------------------------------------------------
-# Pipeline execution
+# Run pipeline
 # --------------------------------------------------
 data = load_data()
 X, y, tfidf_vectorizer = feature_engineering(data)
@@ -192,7 +188,6 @@ model, acc, report, cm = train_model(X, y)
 # UI
 # --------------------------------------------------
 st.title("Toxic Comment Detection (Hinglish + English)")
-st.markdown("Robust multi-class toxic language classifier")
 
 st.sidebar.header("Model Performance")
 st.sidebar.write(f"Accuracy: **{acc:.2f}**")
@@ -225,10 +220,16 @@ if st.button("Analyze"):
     if user_text.strip():
         cleaned = clean_text(user_text)
         X_input = tfidf_vectorizer.transform([cleaned])
+
         pred = model.predict(X_input)[0]
         prob = model.predict_proba(X_input)[0]
 
-        class_map = {0: "Hate Speech", 1: "Offensive Language", 2: "Non-toxic"}
+        class_map = {
+            0: "Hate Speech",
+            1: "Offensive Language",
+            2: "Non-toxic"
+        }
+
         label = class_map[pred]
         conf = prob[pred]
 
@@ -239,8 +240,4 @@ if st.button("Analyze"):
         else:
             st.success(f"{label} ({conf:.2f})")
     else:
-        st.info("Enter some text.")
-
-    else:
-        st.info("Please enter text above to analyze.")
-
+        st.info("Please enter some text to analyze.")
